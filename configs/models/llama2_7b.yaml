@@ -1,0 +1,52 @@
+# LLaMA2-7B Model Configuration
+
+model:
+  name: "llama2-7b"
+  num_layers: 32
+  hidden_size: 4096
+  intermediate_size: 11008
+  num_attention_heads: 32
+  num_kv_heads: 32  # MHA
+  vocab_size: 32000
+  max_position_embeddings: 4096
+
+  # Architectural details
+  architecture: "llama"
+  attention_type: "mha"  # mha or gqa
+  activation_function: "silu"
+  rope_theta: 10000
+
+  # Computed parameters
+  head_dim: 128  # hidden_size / num_attention_heads
+  kv_channels: 128
+
+profiling:
+  # Token-level operators (ms per token)
+  attention_prefill_time_per_token_sq: 0.000012  # coefficient for O(n^2) complexity
+  attention_decode_time_per_token: 0.00015
+  mlp_time_per_token: 0.00025
+  layernorm_time_per_token: 0.00002
+  embedding_time_per_token: 0.00003
+
+  # Communication operators (ms per GB)
+  allreduce_time_per_gb: 5.0
+  allgather_time_per_gb: 4.5
+  send_recv_time_per_gb: 3.0
+
+  # Memory footprint (GB)
+  model_memory_gb: 14.0
+  kv_cache_memory_per_token_mb: 0.0005  # per layer
+
+cluster:
+  num_replicas: 1
+  gpu_type: "A100"
+  num_gpus_per_replica: 1
+
+parallelization:
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 1
+
+scheduler:
+  type: "vllm"
+  max_batch_size: 128
+  max_tokens_per_batch: 4096
