@@ -49,8 +49,8 @@ class Event:
         priority: Priority for tie-breaking (lower = higher priority)
     """
     time: float
-    priority: int = field(default=0)
     event_type: EventType = field(compare=False)
+    priority: int = field(default=0)
     data: dict = field(default_factory=dict, compare=False)
 
     def __post_init__(self):
