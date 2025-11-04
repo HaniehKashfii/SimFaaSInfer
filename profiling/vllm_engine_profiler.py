@@ -25,8 +25,10 @@ from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 from vllm.outputs import RequestOutput
 
-OUTPUT_DIR = Path(os.environ.get("PROFILE_OUTPUT_DIR", "profiling_outputs"))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+BASE_OUTPUT = Path(os.environ.get("PROFILE_OUTPUT_DIR", "profiling_outputs"))
+ENGINE_DIR = BASE_OUTPUT / "engine"
+TRACE_DIR = ENGINE_DIR / "traces"
+TRACE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def percentile(values: List[float], pct: float) -> Optional[float]:
@@ -115,7 +117,7 @@ def run_workload(
         outputs = llm.generate(prompts, sampling, use_tqdm=False)
         total_time = (time.time() - start) * 1000.0
         if capture_trace and prof:
-            trace_path = OUTPUT_DIR / f"kernel_trace_{run_type}_seq{seq_len}_b{batch_size}.json"
+            trace_path = TRACE_DIR / f"kernel_trace_{run_type}_seq{seq_len}_b{batch_size}.json"
             prof.export_chrome_trace(str(trace_path))
 
     metrics = gather_request_metrics(outputs)
@@ -181,7 +183,7 @@ def main() -> None:
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "runs": results,
     }
-    output_path = OUTPUT_DIR / "vllm_engine_profile.json"
+    output_path = ENGINE_DIR / "vllm_engine_profile.json"
     with output_path.open("w") as f:
         json.dump(profile, f, indent=2)
     print(f"Saved {output_path}")

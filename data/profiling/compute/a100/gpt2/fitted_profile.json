@@ -1,0 +1,19 @@
+{
+  "model_name": "gpt2",
+  "operators": {
+    "attention_prefill": 6.030822054459266e-08,
+    "attention_decode": 4.4229298163698e-06,
+    "mlp": 2.6337478374512577e-06,
+    "layernorm": 0.00040466666666666667,
+    "embedding": 3.8e-05
+  },
+  "communication": {
+    "allreduce_time_per_gb": 62.22142672975081,
+    "allgather_time_per_gb": 62.22142672975081,
+    "send_recv_time_per_gb": 62.22142672975081
+  },
+  "memory": {
+    "model_size_gb": 0.47529320418834686,
+    "kv_cache_per_token_mb": 0.32888104838709675
+  }
+}
