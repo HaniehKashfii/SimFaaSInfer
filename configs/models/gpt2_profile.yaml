@@ -1,0 +1,47 @@
+# GPT-2 Profiling-Driven Configuration
+
+model:
+  name: "gpt2"
+  architecture: "gpt"
+  num_layers: 12
+  hidden_size: 768
+  intermediate_size: 3072
+  num_attention_heads: 12
+  num_kv_heads: 12
+  vocab_size: 50257
+  max_position_embeddings: 1024
+  attention_type: "mha"
+  head_dim: 64
+  kv_channels: 64
+
+profiling:
+  attention_prefill_time_per_token_sq: 6.030822054459266e-08
+  attention_decode_time_per_token: 4.4229298163698e-06
+  mlp_time_per_token: 2.6337478374512577e-06
+  layernorm_time_per_token: 0.00040466666666666667
+  embedding_time_per_token: 3.8e-05
+
+  allreduce_time_per_gb: 62.22142672975081
+  allgather_time_per_gb: 62.22142672975081
+  send_recv_time_per_gb: 62.22142672975081
+
+  model_memory_gb: 0.47529320418834686
+  kv_cache_memory_per_token_mb: 0.32888104838709675
+
+  predictors:
+    prefill: "data/profiling/compute/a100/gpt2/predictors/prefill_rf.joblib"
+    decode: "data/profiling/compute/a100/gpt2/predictors/decode_rf.joblib"
+
+cluster:
+  num_replicas: 1
+  gpu_type: "A100"
+  num_gpus_per_replica: 1
+
+parallelization:
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 1
+
+scheduler:
+  type: "vllm"
+  max_batch_size: 128
+  max_tokens_per_batch: 2048

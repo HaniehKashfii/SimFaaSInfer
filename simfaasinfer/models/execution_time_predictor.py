@@ -2,6 +2,8 @@
 
 import numpy as np
 from typing import Dict, List, Optional
+from pathlib import Path
+import joblib
 from sklearn.ensemble import RandomForestRegressor
 
 from .model_config import ModelConfig
@@ -32,6 +34,7 @@ class ExecutionTimePredictor:
         # ML models for runtime prediction (optional)
         self.prefill_predictor = None
         self.decode_predictor = None
+        self._load_external_predictors()
 
     def predict_prefill_time(self, num_tokens: int, batch_size: int) -> float:
         """Predict prefill phase execution time.
@@ -43,6 +46,10 @@ class ExecutionTimePredictor:
         Returns:
             Predicted execution time in milliseconds
         """
+        if self.prefill_predictor is not None:
+            features = self._build_prefill_feature_vector(num_tokens, batch_size).reshape(1, -1)
+            return float(self.prefill_predictor.predict(features)[0])
+
         # Attention: O(n^2) complexity for prefill
         # Approximate as single sequence with equivalent compute
         effective_length = int(np.sqrt(num_tokens))
@@ -103,6 +110,12 @@ class ExecutionTimePredictor:
         Returns:
             Predicted execution time in milliseconds
         """
+        if self.decode_predictor is not None:
+            features = self._build_decode_feature_vector(
+                num_decode_tokens, total_kv_tokens, batch_size
+            ).reshape(1, -1)
+            return float(self.decode_predictor.predict(features)[0])
+
         # Attention: Memory-bound, depends on KV-cache size
         attention_time = (
                 self.model_config.attention_decode_time_per_token *
@@ -202,3 +215,56 @@ class ExecutionTimePredictor:
             self.decode_predictor = RandomForestRegressor(n_estimators=100, random_state=42)
             self.decode_predictor.fit(X_decode, y_decode)
             self.logger.info("Trained decode predictor")
+
+    def _load_external_predictors(self) -> None:
+        """Load pre-trained predictors if file paths are provided."""
+        predictor_paths = {
+            "prefill": getattr(self.model_config, "prefill_predictor_path", None),
+            "decode": getattr(self.model_config, "decode_predictor_path", None),
+        }
+
+        for key, path in predictor_paths.items():
+            if not path:
+                continue
+            predictor_file = Path(path)
+            if predictor_file.is_file():
+                try:
+                    predictor = joblib.load(predictor_file)
+                    if key == "prefill":
+                        self.prefill_predictor = predictor
+                    else:
+                        self.decode_predictor = predictor
+                    self.logger.info("Loaded %s predictor from %s", key, predictor_file)
+                except Exception as exc:
+                    self.logger.warning("Failed to load %s predictor: %s", predictor_file, exc)
+
+    def _build_prefill_feature_vector(self, num_tokens: int, batch_size: int) -> np.ndarray:
+        effective_length = np.sqrt(max(num_tokens, 1))
+        attention_feature = (effective_length ** 2) * self.model_config.num_layers
+        mlp_feature = num_tokens * self.model_config.num_layers
+        return np.array(
+            [
+                attention_feature,
+                mlp_feature,
+                batch_size,
+                max(num_tokens // max(batch_size, 1), 1),
+                self.model_config.hidden_size,
+            ],
+            dtype=np.float64,
+        )
+
+    def _build_decode_feature_vector(
+        self, num_decode_tokens: int, total_kv_tokens: int, batch_size: int
+    ) -> np.ndarray:
+        kv_per_seq = total_kv_tokens / max(batch_size, 1)
+        avg_decode_len = max(num_decode_tokens / max(batch_size, 1), 1)
+        return np.array(
+            [
+                total_kv_tokens * self.model_config.num_layers,
+                num_decode_tokens * self.model_config.num_layers,
+                batch_size,
+                kv_per_seq,
+                self.model_config.hidden_size,
+            ],
+            dtype=np.float64,
+        )

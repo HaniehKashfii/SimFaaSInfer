@@ -87,6 +87,10 @@ class ModelConfig:
         self.model_memory_gb = profiling.get('model_memory_gb', 14.0)
         self.kv_cache_memory_per_token_mb = profiling.get('kv_cache_memory_per_token_mb', 0.0005)
 
+        predictors_cfg = profiling.get('predictors', {})
+        self.prefill_predictor_path: Optional[str] = predictors_cfg.get('prefill')
+        self.decode_predictor_path: Optional[str] = predictors_cfg.get('decode')
+
     def get_kv_cache_size_per_token(self) -> float:
         """Get KV-cache size per token in MB.
 
