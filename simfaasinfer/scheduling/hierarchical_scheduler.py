@@ -9,6 +9,9 @@ Classes:
 """
 from typing import Any, Dict, List, Optional
 
+from simfaasinfer.loader.loading_estimator import estimate_loading_time
+from simfaasinfer.loader.migration_estimator import estimate_resume_time
+
 
 class GlobalScheduler:
     def __init__(self, replicas: List[Any], policy: str = 'round_robin'):
@@ -22,15 +25,96 @@ class GlobalScheduler:
         """
         if not self.replicas:
             return None
-        
+
         if self.policy == 'round_robin':
             replica = self.replicas[self.next_idx % len(self.replicas)]
             self.next_idx += 1
-            return replica
         elif self.policy == 'least_loaded':
-            return min(self.replicas, key=lambda r: r.get_load())
+            replica = min(self.replicas, key=lambda r: r.get_load())
+        elif self.policy == 'startup_time':
+            replica = self._select_min_startup_time(request)
         else:
-            return self.replicas[0]
+            replica = self.replicas[0]
+
+        if replica and self.policy == 'startup_time':
+            # Update queue delay to reflect newly assigned load.
+            load_time = self._estimate_startup_components(replica, request)[0]
+            self._bump_loading_queue(replica, load_time)
+
+        return replica
+
+    def _select_min_startup_time(self, request: Dict[str, Any]) -> Any:
+        """Pick replica with the lowest startup time estimate."""
+        best_replica = None
+        best_startup = float('inf')
+        for replica in self.replicas:
+            _, _, startup_time = self._estimate_startup_components(replica, request)
+            if startup_time < best_startup:
+                best_startup = startup_time
+                best_replica = replica
+        return best_replica
+
+    def _estimate_startup_components(self, replica: Any, request: Optional[Dict[str, Any]]):
+        """Return (load_time, resume_path_time, min_startup_time)."""
+        model_spec = self._extract_model_spec(replica, request)
+        server_state = self._extract_server_state(replica)
+
+        load_time = estimate_loading_time(model_spec, server_state)
+
+        tin, tout = self._extract_migration_times(server_state)
+        resume_time = estimate_resume_time(model_spec, tin, tout)
+        network_transfer = float(server_state.get('migration_network_transfer_s', 0.0))
+        pause_latency = float(server_state.get('pause_latency_s', 0.0))
+        resume_path = resume_time + network_transfer + pause_latency
+
+        startup_time = min(load_time, resume_path)
+        return load_time, resume_path, startup_time
+
+    def _extract_model_spec(self, replica: Any, request: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Favor request-level spec, otherwise fall back to replica metadata."""
+        if request and request.get('model_spec'):
+            return request['model_spec']
+
+        if isinstance(replica, dict):
+            return replica.get('model_spec', {})
+
+        return getattr(replica, 'model_spec', {})
+
+    def _extract_server_state(self, replica: Any) -> Dict[str, Any]:
+        """Extract server state with queue delay fallback."""
+        state = {}
+        if isinstance(replica, dict):
+            state = replica.get('server_state', replica.get('state', {}))
+        else:
+            state = getattr(replica, 'server_state', {})
+
+        state = dict(state or {})
+        if 'loading_queue_estimated_delay' not in state:
+            pending = state.get('pending_load_time_s', 0.0)
+            state['loading_queue_estimated_delay'] = float(pending)
+        return state
+
+    def _extract_migration_times(self, server_state: Dict[str, Any]):
+        """Pull migration tin/tout from server state."""
+        stats = server_state.get('migration_stats', {})
+        tin = stats.get('tin', stats.get('tin_s', server_state.get('last_migration_tin_s', 0.0)))
+        tout = stats.get('tout', stats.get('tout_s', server_state.get('last_migration_tout_s', 0.0)))
+        return float(tin or 0.0), float(tout or 0.0)
+
+    def _bump_loading_queue(self, replica: Any, additional_time: float) -> None:
+        """Accumulate queue delay on the replica's server_state."""
+        if additional_time <= 0:
+            return
+
+        if isinstance(replica, dict):
+            state = replica.setdefault('server_state', {})
+        else:
+            state = getattr(replica, 'server_state', None)
+            if state is None:
+                state = {}
+                setattr(replica, 'server_state', state)
+
+        state['loading_queue_estimated_delay'] = state.get('loading_queue_estimated_delay', 0.0) + additional_time
 
 
 class ReplicaScheduler:
