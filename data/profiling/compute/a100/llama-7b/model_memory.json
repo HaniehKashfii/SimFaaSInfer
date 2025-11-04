@@ -1,0 +1,9 @@
+{
+  "model_name": "gpt2",
+  "param_bytes": 497759232,
+  "buffer_bytes": 12582960,
+  "total_bytes": 510342192,
+  "model_size_gb": 0.47529320418834686,
+  "dtype": "torch.float32",
+  "num_parameters": 124439808
+}

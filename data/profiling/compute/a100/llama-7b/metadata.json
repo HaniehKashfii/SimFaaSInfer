@@ -1,0 +1,12 @@
+{
+  "model_name": "llama-7b",
+  "fitted_profile": "fitted_profile.json",
+  "predictors": {},
+  "hardware": {
+    "gpu": "NVIDIA A100"
+  },
+  "profiling_date": "2025-11-04T21:06:41Z",
+  "raw_trace_location": "/data/profiling/faasinfer/llama7b/a100/trace_prefill_seq512_b8.json",
+  "raw_trace_sha256": "b50b5b060f8992c79e709dd9ce9a3ff8ca974a0f16cc54eccbe34ea5cee63651",
+  "notes": "Large raw trace archived outside git. Small fitted profile and CSVs committed in SimFaaSInfer."
+}
