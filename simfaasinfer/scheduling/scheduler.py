@@ -84,6 +84,17 @@ class GlobalScheduler:
 
         return success
 
+    def drain_pending(self, current_time: float) -> None:
+        """Try to schedule pending requests."""
+        pending_count = len(self.pending_requests)
+        for _ in range(pending_count):
+            request = self.pending_requests.popleft()
+            scheduled = self.schedule_request(request, current_time)
+            if not scheduled:
+                # Put back and stop if no capacity yet
+                self.pending_requests.appendleft(request)
+                break
+
     def _round_robin_select(self, instances: List[FunctionInstance]) -> FunctionInstance:
         """Select instance using round-robin.
 
@@ -122,6 +133,11 @@ class GlobalScheduler:
             batch = replica_scheduler.get_next_batch(current_time)
 
             if batch:
+                self.logger.debug(
+                    "Scheduling batch on instance %s with %d requests",
+                    instance_id,
+                    len(batch),
+                )
                 event_queue.push(Event(
                     time=current_time,
                     event_type=EventType.BATCH_START,

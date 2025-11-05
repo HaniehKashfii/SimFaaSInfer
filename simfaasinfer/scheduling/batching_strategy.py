@@ -55,9 +55,9 @@ class BatchingStrategy(ABC):
         """
         total = 0
         for req in requests:
-            if phase == 'prefill' or (phase == 'mixed' and req.tokens_generated == 0):
+            if phase == 'prefill' or (phase == 'mixed' and not req.prefill_complete):
                 total += req.prompt_tokens
-            elif phase == 'decode' or (phase == 'mixed' and req.tokens_generated > 0):
+            elif phase == 'decode' or (phase == 'mixed' and req.prefill_complete):
                 total += 1  # One token per decode request
         return total
 
@@ -87,7 +87,7 @@ class VLLMBatcher(BatchingStrategy):
         token_count = 0
 
         # First, try to add waiting prefills
-        prefills = [r for r in waiting_requests if r.tokens_generated == 0]
+        prefills = [r for r in waiting_requests if not r.prefill_complete]
         for req in prefills[:self.max_batch_size]:
             if len(batch) >= self.max_batch_size:
                 break
@@ -99,7 +99,7 @@ class VLLMBatcher(BatchingStrategy):
 
         # Then add running decodes if space available
         if len(batch) < self.max_batch_size:
-            decodes = [r for r in running_requests if not r.is_complete()]
+            decodes = [r for r in running_requests if r.prefill_complete and not r.is_complete()]
             for req in decodes:
                 if len(batch) >= self.max_batch_size:
                     break
@@ -136,12 +136,15 @@ class OrcaBatcher(BatchingStrategy):
         batch = []
 
         # Add all running requests first (no preemption)
-        running_decodes = [r for r in running_requests if not r.is_complete()]
+        running_decodes = [
+            r for r in running_requests
+            if r.prefill_complete and not r.is_complete()
+        ]
         batch.extend(running_decodes[:self.max_batch_size])
 
         # Fill remaining slots with prefills
         if len(batch) < self.max_batch_size:
-            prefills = [r for r in waiting_requests if r.tokens_generated == 0]
+            prefills = [r for r in waiting_requests if not r.prefill_complete]
             remaining_slots = self.max_batch_size - len(batch)
 
             token_count = len(batch)  # Decodes use 1 token each
@@ -193,13 +196,16 @@ class SarathiBatcher(BatchingStrategy):
         token_count = 0
 
         # Always include running decodes
-        running_decodes = [r for r in running_requests if not r.is_complete()]
+        running_decodes = [
+            r for r in running_requests
+            if r.prefill_complete and not r.is_complete()
+        ]
         batch.extend(running_decodes)
         token_count += len(running_decodes)
 
         # Add chunked prefills
         if len(batch) < self.max_batch_size:
-            prefills = [r for r in waiting_requests if r.tokens_generated == 0]
+            prefills = [r for r in waiting_requests if not r.prefill_complete]
 
             for req in prefills:
                 if len(batch) >= self.max_batch_size:
@@ -250,7 +256,7 @@ class FasterTransformerBatcher(BatchingStrategy):
             return batch if len(batch) > 0 else None
 
         # Otherwise do prefill phase
-        prefills = [r for r in waiting_requests if r.tokens_generated == 0]
+        prefills = [r for r in waiting_requests if not r.prefill_complete]
         if len(prefills) >= self.max_batch_size // 2:  # Wait for minimum batch
             batch = prefills[:self.max_batch_size]
             return batch

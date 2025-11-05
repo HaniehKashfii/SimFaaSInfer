@@ -45,3 +45,6 @@ scheduler:
   type: "vllm"
   max_batch_size: 128
   max_tokens_per_batch: 2048
+
+logging:
+  level: "DEBUG"

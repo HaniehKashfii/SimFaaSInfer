@@ -43,6 +43,7 @@ class Request:
     tokens_generated: int = 0
     kv_cache_tokens: int = 0
     assigned_instance: Optional[int] = None
+    prefill_complete: bool = False
 
     def is_complete(self) -> bool:
         """Check if request is complete."""
@@ -90,7 +91,7 @@ class FunctionInstance:
         )
 
         # Current state
-        self.current_batch: List[Request] = []
+        self.active_requests: List[Request] = []
         self.kv_cache_used_tokens = 0
         self.is_processing = False
 
@@ -142,7 +143,7 @@ class FunctionInstance:
         if not self.can_fit_request(request):
             return False
 
-        self.current_batch.append(request)
+        self.active_requests.append(request)
         request.assigned_instance = self.instance_id
         request.schedule_time = current_time
 
@@ -168,36 +169,53 @@ class FunctionInstance:
         self.is_processing = True
         self.state = InstanceState.BUSY
 
-        # Separate prefill and decode
-        prefill_requests = [r for r in batch if r.tokens_generated == 0]
-        decode_requests = [r for r in batch if r.tokens_generated > 0]
+        # Separate phases
+        prefill_requests = [r for r in batch if not r.prefill_complete]
+        decode_requests = [r for r in batch if r.prefill_complete and not r.is_complete()]
 
         # Calculate tokens
         prefill_tokens = sum(r.prompt_tokens for r in prefill_requests)
-        decode_tokens = len(decode_requests)  # One token per request
+        decode_tokens = len(decode_requests)
         kv_cache_tokens = sum(r.kv_cache_tokens + r.tokens_generated for r in decode_requests)
 
         # Predict execution time
-        execution_time_ms = self.predictor.predict_batch_time(
-            prefill_tokens=prefill_tokens,
-            decode_tokens=decode_tokens,
-            kv_cache_tokens=kv_cache_tokens,
-            batch_size=len(batch)
-        )
+        prefill_time_ms = 0.0
+        decode_time_ms = 0.0
+        if prefill_tokens > 0:
+            prefill_time_ms = self.predictor.predict_prefill_time(
+                num_tokens=prefill_tokens,
+                batch_size=max(1, len(prefill_requests))
+            )
+        if decode_tokens > 0:
+            decode_time_ms = self.predictor.predict_decode_time(
+                num_decode_tokens=decode_tokens,
+                total_kv_tokens=kv_cache_tokens,
+                batch_size=max(1, len(decode_requests))
+            )
+
+        execution_time_ms = prefill_time_ms + decode_time_ms
 
         # Update request states
+        per_request_prefill = (prefill_time_ms / 1000.0) / max(1, len(prefill_requests))
         for request in prefill_requests:
             if not request.prefill_start_time:
                 request.prefill_start_time = current_time
-                request.kv_cache_tokens = request.prompt_tokens
+            request.prefill_time += per_request_prefill
+            request.prefill_complete = True
+            request.kv_cache_tokens = request.prompt_tokens
 
+        per_request_decode = (decode_time_ms / 1000.0) / max(1, len(decode_requests)) if decode_requests else 0.0
         for request in decode_requests:
             if not request.first_token_time and request.tokens_generated == 0:
                 request.first_token_time = current_time
             if not request.decode_start_time:
                 request.decode_start_time = current_time
 
-            request.tokens_generated += 1
+            request.tokens_generated = min(
+                request.decode_tokens,
+                request.tokens_generated + 1
+            )
+            request.decode_time += per_request_decode
             request.kv_cache_tokens += 1
 
         # Update statistics
@@ -207,26 +225,22 @@ class FunctionInstance:
 
         return execution_time_sec
 
-    def remove_completed_requests(self) -> List[Request]:
-        """Remove and return completed requests.
+    def finalize_requests(self) -> None:
+        """Release resources for completed requests."""
+        remaining = []
+        for request in self.active_requests:
+            if request.is_complete():
+                freed_tokens = request.prompt_tokens + request.decode_tokens
+                self.kv_cache_used_tokens = max(0, self.kv_cache_used_tokens - freed_tokens)
+                self.total_requests_processed += 1
+            else:
+                remaining.append(request)
 
-        Returns:
-            List of completed requests
-        """
-        completed = [r for r in self.current_batch if r.is_complete()]
-        self.current_batch = [r for r in self.current_batch if not r.is_complete()]
+        self.active_requests = remaining
 
-        # Free KV-cache
-        for request in completed:
-            freed_tokens = request.prompt_tokens + request.decode_tokens
-            self.kv_cache_used_tokens -= freed_tokens
-            self.total_requests_processed += 1
-
-        if not self.current_batch:
+        if not self.active_requests:
             self.state = InstanceState.IDLE
             self.is_processing = False
-
-        return completed
 
     def get_utilization(self) -> float:
         """Get compute utilization.
@@ -262,7 +276,7 @@ class FunctionInstance:
             'state': self.state.value,
             'utilization': self.get_utilization(),
             'memory_utilization': self.get_memory_utilization(),
-            'requests_in_progress': len(self.current_batch),
+            'requests_in_progress': len(self.active_requests),
             'total_requests_processed': self.total_requests_processed,
             'kv_cache_used': self.kv_cache_used_tokens,
             'kv_cache_capacity': self.kv_cache_capacity_tokens,

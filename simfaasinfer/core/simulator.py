@@ -247,8 +247,13 @@ class Simulator:
                     priority=40
                 ))
 
+        instance = self.instance_manager.get_instance(instance_id)
+        if instance:
+            instance.finalize_requests()
+
         # Schedule next batch
         self.scheduler.trigger_batch_execution(self.current_time, self.event_queue)
+        self.scheduler.drain_pending(self.current_time)
 
     def _handle_request_complete(self, event: Event) -> None:
         """Handle request completion."""
@@ -290,6 +295,8 @@ class Simulator:
             self.logger.debug(
                 f"Instance {instance_id} ready after {cold_start_time:.2f}s cold start"
             )
+            self.scheduler.drain_pending(self.current_time)
+            self.scheduler.trigger_batch_execution(self.current_time, self.event_queue)
 
     def _handle_instance_shutdown(self, event: Event) -> None:
         """Handle instance shutdown."""
