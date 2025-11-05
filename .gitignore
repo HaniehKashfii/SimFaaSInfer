@@ -1,0 +1,28 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+simfaasinfer.egg-info/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Profiling raw outputs (archived externally)
+profiling_outputs/
+data/profiling/*/raw/
+
+# Editor/IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Backups
+*.bak
