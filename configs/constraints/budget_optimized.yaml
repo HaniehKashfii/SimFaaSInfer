@@ -1,0 +1,13 @@
+# Budget-optimized constraints - maximize QPS per dollar
+
+# Service Level Objectives (more relaxed)
+max_ttft_p95_ms: 3000     # Time to First Token P95 < 3s
+max_tbt_p99_ms: 300       # Time Between Tokens P99 < 300ms
+max_latency_p99_ms: 15000 # Total latency P99 < 15s
+
+# Strict cost constraints
+max_cost_per_hour: 25.0  # Low budget
+min_qps: 5.0
+
+# Scheduling delay threshold
+slo_threshold_ms: 1500

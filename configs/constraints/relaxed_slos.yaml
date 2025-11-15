@@ -1,0 +1,13 @@
+# Relaxed SLO constraints for batch processing
+
+# Service Level Objectives
+max_ttft_p95_ms: 5000     # Time to First Token P95 < 5s
+max_tbt_p99_ms: 500       # Time Between Tokens P99 < 500ms
+max_latency_p99_ms: 30000 # Total latency P99 < 30s
+
+# Cost constraints
+max_cost_per_hour: 100.0
+min_qps: 5.0
+
+# Scheduling delay threshold
+slo_threshold_ms: 2000

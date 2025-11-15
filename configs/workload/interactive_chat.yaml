@@ -1,0 +1,22 @@
+# Interactive chat workload configuration
+
+arrival_rate_range: [5, 50]
+max_qps: 50
+
+# Shorter prompts for chat
+prompt_length:
+  distribution: "normal"
+  mean: 256
+  std: 64
+  min: 64
+  max: 1024
+
+# Moderate output length
+output_length:
+  distribution: "normal"
+  mean: 128
+  std: 32
+  min: 16
+  max: 512
+
+pattern: "poisson"

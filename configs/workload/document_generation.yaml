@@ -1,0 +1,22 @@
+# Document generation workload configuration
+
+arrival_rate_range: [1, 20]
+max_qps: 20
+
+# Longer prompts with context
+prompt_length:
+  distribution: "normal"
+  mean: 1024
+  std: 256
+  min: 512
+  max: 4096
+
+# Longer outputs
+output_length:
+  distribution: "normal"
+  mean: 512
+  std: 128
+  min: 128
+  max: 2048
+
+pattern: "poisson"

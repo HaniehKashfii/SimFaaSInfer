@@ -1,0 +1,13 @@
+# Strict SLO constraints for interactive applications
+
+# Service Level Objectives
+max_ttft_p95_ms: 1000    # Time to First Token P95 < 1s
+max_tbt_p99_ms: 100      # Time Between Tokens P99 < 100ms
+max_latency_p99_ms: 5000 # Total latency P99 < 5s
+
+# Cost constraints
+max_cost_per_hour: 50.0
+min_qps: 10.0
+
+# Scheduling delay threshold for Vidur search
+slo_threshold_ms: 500

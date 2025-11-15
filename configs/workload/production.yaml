@@ -1,0 +1,26 @@
+# Production workload configuration for capacity planning
+
+arrival_rate_range: [10, 100]  # QPS range to explore
+max_qps: 100  # Maximum QPS to test
+
+# Prompt length distribution
+prompt_length:
+  distribution: "normal"
+  mean: 512
+  std: 128
+  min: 128
+  max: 2048
+
+# Output length distribution
+output_length:
+  distribution: "normal"
+  mean: 256
+  std: 64
+  min: 32
+  max: 1024
+
+# Request pattern (optional)
+pattern: "poisson"  # Options: poisson, burst, uniform
+
+# Trace replay (optional - overrides distributions above)
+# trace_file: "data/traces/production_trace.json"
